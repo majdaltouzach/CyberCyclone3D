@@ -40,7 +40,7 @@ Severity scoring using CVSS v3.x / v4.0
 Dashboard stats: total open CVEs, critical count, newly published, recently patched
 Architecture
 ┌──────────────────────┐        ┌───────────────────────────────┐
-│   CVE Data Sources    │        │          Go Backend            │
+│   CVE Data Sources    │        │  Hybrid Python + Rust Backend  │
 │  (NVD API / CVE feeds)│──────▶│  ┌─────────────┐  ┌──────────┐ │
 └──────────────────────┘        │  │  Ingestor   │─▶│ Matcher  │ │
                                 │  └─────────────┘  └────┬─────┘ │
@@ -51,7 +51,7 @@ Architecture
                                 │  └───────────┬─────────────┘   │
                                 │              ▼                 │
                                 │  ┌─────────────────────────┐   │
-                                │  │ REST API + WebSocket Hub │   │
+                                │  │ FastAPI REST + WebSocket │   │
                                 │  └───────────┬─────────────┘   │
                                 └──────────────┼─────────────────┘
                                                │
@@ -70,25 +70,20 @@ The frontend updates the globe, topology map, and alert feed live.
 Tech Stack
 Layer	Technology
 Frontend	React, Three.js, React Three Fiber, @react-three/drei
-Backend	Go (net/http or Gin/Fiber), Gorilla WebSocket
+Backend	Python (FastAPI, Uvicorn, WebSockets) + Rust core (PyO3, built with maturin)
 Data	NVD CVE API 2.0 / CVE JSON feeds
 Database	[PostgreSQL / SQLite — TBD]
 Cache	[Redis — optional, TBD]
 DevOps	Docker, Docker Compose
 Project Structure
 [PROJECT_NAME]/
-├── backend/
-│   ├── cmd/
-│   │   └── server/
-│   │       └── main.go          # entry point
-│   ├── internal/
-│   │   ├── ingest/              # CVE feed polling
-│   │   ├── matcher/             # CVE ↔ asset matching
-│   │   ├── api/                 # REST handlers
-│   │   ├── ws/                  # WebSocket hub
-│   │   └── store/               # database layer
-│   ├── go.mod
-│   └── go.sum
+├── rust_telemetry/              # Rust core (PyO3 extension module)
+│   ├── src/lib.rs               # TelemetryFrame + process_raw_packet
+│   ├── Cargo.toml
+│   └── pyproject.toml
+├── main.py                      # FastAPI app + WebSocket broadcaster
+├── test_telemetry.py            # Rust/Python boundary tests
+├── requirements.txt
 ├── frontend/
 │   ├── src/
 │   │   ├── components/
@@ -104,7 +99,8 @@ Project Structure
 └── README.md
 Getting Started
 Prerequisites
-Go 1.22+
+Python 3.10+
+Rust toolchain (stable, via rustup)
 Node.js 20+ and npm
 (Optional) Docker + Docker Compose
 (Recommended) An NVD API key for higher rate limits
@@ -118,11 +114,13 @@ cp .env.example .env
 # then edit .env and add your values
 3. Run the backend
 bash
-cd backend
-go mod download
-go run ./cmd/server
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cd rust_telemetry && maturin develop --release && cd ..
+pytest -q test_telemetry.py   # optional: verify Rust boundary safety
+python main.py
 
-Backend runs at http://localhost:8080.
+Backend runs at http://localhost:8000.
 
 4. Run the frontend
 bash
@@ -137,13 +135,13 @@ bash
 docker compose up --build
 Configuration
 Variable	Description	Default
-PORT	Backend server port	8080
+PORT	Backend server port	8000
 NVD_API_KEY	NVD API key	(none)
 CVE_POLL_INTERVAL	How often to pull new CVEs	15m
 DATABASE_URL	Database connection string	(required)
 ALLOWED_ORIGINS	CORS origins for the frontend	http://localhost:5173
-VITE_API_URL	Backend URL used by the frontend	http://localhost:8080
-VITE_WS_URL	WebSocket URL used by the frontend	ws://localhost:8080/ws
+VITE_API_URL	Backend URL used by the frontend	http://localhost:8000
+VITE_WS_URL	WebSocket URL used by the frontend	ws://localhost:8000/v1/telemetry/stream
 API Reference
 Method	Endpoint	Description
 GET	/api/health	Health check
@@ -155,7 +153,7 @@ GET	/api/alerts	List recent alerts
 GET	/api/stats	Dashboard summary numbers
 WebSocket Events
 
-Connect to ws://localhost:8080/ws.
+Connect to ws://localhost:8000/v1/telemetry/stream.
 
 Event	Direction	Payload (example)
 cve.new	server → client	{ "id": "CVE-2026-12345", "cvss": 9.8, "severity": "CRITICAL" }
