@@ -180,3 +180,10 @@ Open a Pull Request
 License
 
 This project is licensed under the MIT License. See LICENSE for details.
+
+
+
+FOUNDERS:
+
+TOUFIC MAJDALANI
+CHAUNTE STERLING
