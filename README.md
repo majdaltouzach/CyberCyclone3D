@@ -183,7 +183,7 @@ This project is licensed under the MIT License. See LICENSE for details.
 
 
 
-FOUNDERS:
+# FOUNDERS:
 
-TOUFIC MAJDALANI
-CHAUNTE STERLING
+- TOUFIC MAJDALANI
+- CHAUNTE STERLING
